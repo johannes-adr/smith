@@ -1,0 +1,36 @@
+enum Optional<T>{
+    Some(T)
+    None
+}
+
+struct Packet{
+    id: u8
+    payload: PacketType
+}
+
+//Dont work - Array<T> will not generate a optional with string type
+struct Order<T>{
+    table_number: udInt
+    items: Optional<Array<T>>
+}
+
+enum PacketType{
+    Ack
+    LogOut
+    Order(Order<string>)
+}
+
+enum OkErr<A,B>{
+    Ok(A)
+    Err(B)
+}
+
+struct Person{
+    name: string
+    age: u8
+    desc: Optional<string>
+}
+
+struct Test{
+    num: u8
+}

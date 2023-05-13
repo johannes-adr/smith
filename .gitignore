@@ -1,0 +1,9 @@
+**/target
+**/.idea
+**/.vscode
+**/.DS_Store
+smith-test/example copy.json
+smith-test/example.json
+smith-test/*.bin
+
+smith-webdemo/pkg

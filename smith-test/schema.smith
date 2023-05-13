@@ -1,0 +1,20 @@
+struct Person{
+    index: udInt
+    alive: bool
+    isActive: bool
+    picture: string
+    age: u8
+    name: string
+    latitude: f32
+    longitude: f32
+    friends: Array<SimplePerson>
+}
+
+struct SimplePerson{
+    id: u8
+    name: string
+}
+
+struct Root{
+    person: Array<Person>
+}

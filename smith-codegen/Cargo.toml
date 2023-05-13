@@ -1,0 +1,16 @@
+[package]
+name = "smith-codegen"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+smith-core = {path = "../smith-core"}
+structopt = "0.3.26"
+quote = "1.0.26"
+rust-format = {version = "0.3.4", features = ["token_stream"]}
+serde = "1.0.160"
+
+[lib]
+doctest = false

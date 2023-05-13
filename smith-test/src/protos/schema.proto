@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+message SomeMessage {
+    message Friends {
+        uint32 id = 1;
+        string name = 2;
+    }
+    message Person {
+        uint32 index = 1;
+        bool alive = 2;
+        bool isActive = 3;
+        string picture = 4;
+        uint32 age = 5;
+        string name = 6;
+        float latitude = 7;
+        float longitude = 8;
+        repeated Friends friends = 9;
+    }
+
+    repeated Person person = 1;
+}

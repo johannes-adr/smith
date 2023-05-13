@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="main.js" async defer type="module"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/atom-one-dark.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: rgba(35, 36, 43, 255);
+            padding: 10px;
+            color: rgb(221, 221, 221);
+        }
+
+        hstack {
+            display: flex;
+            flex-direction: row;
+        }
+
+        vstack {
+            display: flex;
+            flex-direction: column;
+        }
+        #outlist{
+            max-height: 80vh;
+            overflow: auto;
+        }
+        .output {
+            border: solid 1px;
+            padding: 5px;
+            border-radius: 5px;
+            background-color: #292c34;
+            border: none;
+            box-shadow: 0 0 5px 2px rgba(0, 0, 0, 0.36);
+            margin: 8px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body class="vstack">
+    <h1 style="margin: 0;">Smith-Tools</h1>
+    <div class="hstack">
+        <div class="vstack">
+
+            <pre id="schema" class="output" contenteditable>
+            </pre>
+            <div class="hstack">
+                <button onclick="recompile()">Recompile Schema</button>
+            </div>
+        </div>
+
+        <div class="vstack" id="outlist"></div>
+    </div>
+</body>
+
+</html>

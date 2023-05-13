@@ -1,0 +1,16 @@
+struct Pair<A,B>{
+    first:  A
+    second: B
+}
+
+enum Optional<T>{
+    Some(T)
+    None
+}
+
+enum WebEvent {
+    PageLoad
+    KeyPress(u8)
+    OnInput(Optional<WebEvent>)
+    Click(Pair<u32,u32>)
+}

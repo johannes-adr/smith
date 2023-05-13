@@ -1,0 +1,19 @@
+struct Kurs{
+    leiter: Optional<Person>
+    matrikelnr: Array<udInt>
+}
+
+struct Person{
+    name: Name
+    alter: udInt
+}
+
+struct Name{
+    vorname: string
+    nachname: string
+}
+
+enum Optional<T>{
+    Some(T)
+    None
+}    

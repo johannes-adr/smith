@@ -1,0 +1,42 @@
+WHITESPACE = _{ " " }
+
+alpha = {'a'..'z' | 'A'..'Z'}
+newline = _{("\r\n" | "\n")}
+identifier = @{alpha ~ (alpha | ASCII_DIGIT | "_")*}
+struct_name = @{alpha ~ (alpha | ASCII_DIGIT)*}
+comment_multiline = _{ "/*" ~ (!"*/" ~ ANY)* ~ "*/" }
+comment = {"//" ~ (!"\n" ~ ANY)* ~ "\n"}
+
+
+typename = ${identifier ~ ("<" ~ typename ~ ("," ~ typename)* ~ ">")?}
+
+structfield = {
+    identifier ~ ":" ~ typename
+}
+
+
+generic_list = {typename ~ ("|" ~ typename)*}
+generic_decl = {identifier~ (":" ~ generic_list)?}
+generics = {"<"~(generic_decl ~ ",")* ~ (generic_decl) ~ ">"}
+
+Struct = {
+    "struct" ~ struct_name ~ generics? ~ "{" ~newline? 
+        ~ (structfield ~ newline*)* ~
+    "}"
+}
+
+enum_variant = {
+    identifier ~ ("(" ~ typename ~ ")")?
+}
+
+Enum = {
+    "enum" ~struct_name ~generics? ~"{"~newline? 
+        ~ (enum_variant ~newline*)* ~
+    "}"
+}
+
+document = {
+        SOI ~ newline* ~ 
+        ((comment | comment_multiline | Struct | Enum) ~ newline*)* ~
+        EOI
+}

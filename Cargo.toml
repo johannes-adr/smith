@@ -1,0 +1,10 @@
+[workspace]
+default-members = ["smith-test"]
+
+members = [
+    "smith-codegen",
+    "Dynum",
+    "smith-core",
+    "smith-js",
+    "smith-test"
+]
