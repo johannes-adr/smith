@@ -1,4 +1,6 @@
-use serde::ser::{SerializeSeq, SerializeStruct};
+use std::{todo, println};
+
+use serde::ser::SerializeSeq;
 use serde::{ser, Serialize};
 
 use crate::ser::serialize_struct::StructEnumSerializer;
@@ -119,6 +121,40 @@ where
     Ok(serializer.buff.into_boxed_slice())
 }
 
+pub trait AsyncSerializer: ser::Serializer {
+    fn serialize_slice_async<T: Serialize + Sync>(self, seq: &[T]) -> std::result::Result<Self::Ok,Self::Error>;
+}
+
+impl<'a, 'b> AsyncSerializer for &'a mut Serializer<'b> {
+    fn serialize_slice_async<T: Serialize + Sync>(self, seq: &[T]) -> Result<()> {
+        if let SmithType::Array(elemtyp) = self.current_type {
+            self.current_type = &SmithType::UInt;
+            seq.len().serialize(&mut *self)?;
+
+            let mut arrbuff = seq
+                .par_chunks(seq.len() / num_cpus::get())
+                .map(|chunk| {
+                    let mut serializer = self.copy_context();
+                    for val in chunk {
+                        serializer.current_type = elemtyp;
+                        val.serialize(&mut serializer).unwrap();
+                    }
+                    serializer.buff
+                })
+                .flatten()
+                .collect::<Vec<_>>();
+
+            self.buff.append(&mut arrbuff);
+            Ok(())
+        } else {
+            Err(Error::MissmatchedType {
+                expected: format!("{:?}", self.current_type),
+                received: "Array",
+            })
+        }
+    }
+}
+
 impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     type Ok = ();
 
@@ -132,7 +168,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     type SerializeStruct = StructEnumSerializer<'a, 'b>;
     type SerializeMap = StructEnumSerializer<'a, 'b>;
     type SerializeStructVariant = Self;
-
+    #[inline(always)]
     fn serialize_bool(self, v: bool) -> Result<()> {
         if let SmithType::Bool = self.current_type {
             self.buff.push((v as u8).to_be());
@@ -144,46 +180,46 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
             })
         }
     }
-
+    #[inline(always)]
     fn serialize_i8(self, v: i8) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_i16(self, v: i16) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_i32(self, v: i32) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_i64(self, v: i64) -> Result<()> {
         self.serialize_i32(v.try_into().map_err(|_| Error::I64CastI32Failed)?)
     }
-
+    #[inline(always)]
     fn serialize_u8(self, v: u8) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_u16(self, v: u16) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_u32(self, v: u32) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_u64(self, v: u64) -> Result<()> {
         serialize_number!(self, v);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_f32(self, v: f32) -> Result<()> {
         match self.current_type {
             SmithType::F32 => self.buff.extend_from_slice(&v.to_be_bytes()),
@@ -197,7 +233,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         };
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_f64(self, v: f64) -> Result<()> {
         match self.current_type {
             SmithType::F32 => self.buff.extend_from_slice(&(v as f32).to_be_bytes()),
@@ -211,25 +247,25 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         };
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_char(self, v: char) -> Result<()> {
         self.serialize_str(&v.to_string())
     }
-
+    #[inline(always)]
     fn serialize_str(self, v: &str) -> Result<()> {
         require_type!(SmithType::String, self);
         self.buff.extend_from_slice(v.as_bytes());
         self.buff.push(0);
         Ok(())
     }
-
+    #[inline(always)]
     fn serialize_some<T>(self, value: &T) -> Result<()>
     where
         T: ?Sized + Serialize,
     {
         value.serialize(self)
     }
-
+    #[inline(always)]
     fn serialize_none(self) -> Result<()> {
         Ok(())
     }
@@ -332,7 +368,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
      */
 
     fn serialize_seq(self, _len: Option<usize>) -> Result<Self::SerializeSeq> {
-        if let SmithType::Array(a) = self.current_type {
+        if let SmithType::Array(elemtyp) = self.current_type {
             if let Some(_len) = _len {
                 self.current_type = &SmithType::UInt;
                 _len.serialize(&mut *self)?
@@ -341,7 +377,7 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
             }
 
             Ok(SeqSerializer {
-                elemtyp: a,
+                elemtyp,
                 serializer: self,
             })
         } else {
@@ -422,34 +458,13 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     }
 }
 
+
 pub struct SeqSerializer<'a, 'b> {
     pub elemtyp: &'b SmithType<usize>,
     pub serializer: &'a mut Serializer<'b>,
 }
 
-/**
- * Uses Rayon to split up iteration of array
- */
-impl<'a, 'b> SeqSerializer<'a, 'b> {
-    pub fn serialize_vec_async<T: Serialize + Sync>(self, vec: &Vec<T>) -> Result<()> {
-        let mut arrbuff = vec
-            .par_chunks(vec.len() / 12)
-            .map(|chunk| {
-                let mut serializer = self.serializer.copy_context();
-                let typ = self.elemtyp;
-                for val in chunk {
-                    serializer.current_type = typ;
-                    val.serialize(&mut serializer).unwrap();
-                }
-                serializer.buff
-            })
-            .flatten()
-            .collect::<Vec<_>>();
 
-        self.serializer.buff.append(&mut arrbuff);
-        self.end()
-    }
-}
 
 impl<'a, 'b> ser::SerializeSeq for SeqSerializer<'a, 'b> {
     type Ok = ();
