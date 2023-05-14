@@ -14,6 +14,12 @@ use super::resolver::ResolvedSmithProgram;
 mod serialize_struct;
 mod string_serializer;
 
+
+pub trait AsyncSerializer: ser::Serializer {
+    fn serialize_slice_async<T: Serialize + Sync>(self, seq: &[T]) -> std::result::Result<Self::Ok,Self::Error>;
+}
+
+
 macro_rules! require_type {
     ($Path:path, $Self:ident) => {{
         if let $Path = $Self.current_type {
@@ -121,9 +127,7 @@ where
     Ok(serializer.buff.into_boxed_slice())
 }
 
-pub trait AsyncSerializer: ser::Serializer {
-    fn serialize_slice_async<T: Serialize + Sync>(self, seq: &[T]) -> std::result::Result<Self::Ok,Self::Error>;
-}
+
 
 impl<'a, 'b> AsyncSerializer for &'a mut Serializer<'b> {
     fn serialize_slice_async<T: Serialize + Sync>(self, seq: &[T]) -> Result<()> {

@@ -1,5 +1,6 @@
-#![feature(specialization)]
-
+// #![feature(specialization)]
+// mod smith_asyncvec;
+// use smith_asyncvec::AsyncVec;
 use std::{fs, time::{Instant, Duration}, ops::{Add, Deref, DerefMut}, todo, println};
 
 use Types::Root;
@@ -10,8 +11,7 @@ use protos::schema::SomeMessage;
 use serde_json::Value;
 use smith_core::Smith;
 mod protos;
-mod smith_asyncvec;
-use smith_asyncvec::AsyncVec;
+
 
 
 
@@ -19,8 +19,8 @@ fn get_json() -> (Value,String,String){
     let json =  fs::read_to_string("./smith-test/example.json").unwrap();
     
     let mut root: Root = serde_json::from_str(&json).unwrap();
-    for _ in 0..2{
-        let mut cpy = root.person.deref_mut().clone();
+    for _ in 0..6{
+        let mut cpy = root.person.clone();
         root.person.append(&mut cpy);
     }
 
@@ -35,7 +35,7 @@ fn get_json() -> (Value,String,String){
 fn main() {
     let (jsonval,json,jsonmin) = get_json();
 
-    let runs = 100;
+    let runs = 10;
 
     let smith = Smith::new(&fs::read_to_string("./smith-test/schema.smith").unwrap());
     let typ = smith.get_type("Root").unwrap();
@@ -106,7 +106,7 @@ fn smithroot2proto(root: Root) -> SomeMessage{
     
     //convert root to some message
     let mut new_root = protos::schema::SomeMessage::new();
-    for person in root.clone().person.into_inner(){
+    for person in root.clone().person{
         let mut new_person = protos::schema::some_message::Person::new();
         new_person.age = person.age as u32;
         new_person.index = person.index as u32;
@@ -191,8 +191,7 @@ pub mod Types {
     // smith_rsmacro::generate_bindings!("./schema.smith");
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
-
-use crate::AsyncVec;
+use super::*;
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Person<'a> {
     pub index: u64,
@@ -213,7 +212,7 @@ pub struct SimplePerson<'a> {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Root<'a> {
     #[serde(borrow)]
-    pub person: AsyncVec<Person<'a>>,
+    pub person: Vec<Person<'a>>,
 }
 
 }
