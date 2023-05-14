@@ -1,13 +1,11 @@
+use serde::ser::{SerializeSeq, SerializeStruct};
 use serde::{ser, Serialize};
-use serde::ser::SerializeStruct;
 
+use crate::ser::serialize_struct::StructEnumSerializer;
+use crate::{smith_serde, SmithType};
+use rayon::prelude::*;
 use serialize_struct::{EnumSerializer, StructSerializer};
 use smith_serde::{Error, Result};
-
-use crate::{
-    smith_serde, SmithType,
-};
-use crate::ser::serialize_struct::StructEnumSerializer;
 
 use super::resolver::ResolvedSmithProgram;
 
@@ -89,9 +87,17 @@ pub struct Serializer<'a> {
 impl<'a> Serializer<'a> {
     pub fn new(prog: &'a ResolvedSmithProgram, typ: &'a SmithType<usize>) -> Self {
         Self {
-            buff: Vec::with_capacity(64),
+            buff: Vec::with_capacity(1048),
             prog,
             current_type: typ,
+        }
+    }
+
+    pub fn copy_context(&self) -> Self {
+        Self {
+            buff: Vec::with_capacity(128),
+            prog: self.prog,
+            current_type: self.current_type,
         }
     }
 
@@ -105,8 +111,8 @@ pub fn to_binary<T>(
     prog: &ResolvedSmithProgram,
     typ: &SmithType<usize>,
 ) -> Result<Box<[u8]>>
-    where
-        T: Serialize,
+where
+    T: Serialize,
 {
     let mut serializer = Serializer::new(prog, typ);
     value.serialize(&mut serializer)?;
@@ -218,8 +224,8 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_some<T>(self, value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         value.serialize(self)
     }
@@ -263,8 +269,8 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
         variant: &'static str,
         value: &T,
     ) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         if let SmithType::CustomType(id, _) = self.current_type {
             let s = self
@@ -409,8 +415,8 @@ impl<'a, 'b> ser::Serializer for &'a mut Serializer<'b> {
     }
 
     fn serialize_newtype_struct<T>(self, _name: &'static str, _value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         unimplemented!("SMITH does not support serialization of newtype structs")
     }
@@ -421,13 +427,37 @@ pub struct SeqSerializer<'a, 'b> {
     pub serializer: &'a mut Serializer<'b>,
 }
 
+/**
+ * Uses Rayon to split up iteration of array
+ */
+impl<'a, 'b> SeqSerializer<'a, 'b> {
+    pub fn serialize_vec_async<T: Serialize + Sync>(self, vec: &Vec<T>) -> Result<()> {
+        let mut arrbuff = vec
+            .par_chunks(vec.len() / 12)
+            .map(|chunk| {
+                let mut serializer = self.serializer.copy_context();
+                let typ = self.elemtyp;
+                for val in chunk {
+                    serializer.current_type = typ;
+                    val.serialize(&mut serializer).unwrap();
+                }
+                serializer.buff
+            })
+            .flatten()
+            .collect::<Vec<_>>();
+
+        self.serializer.buff.append(&mut arrbuff);
+        self.end()
+    }
+}
+
 impl<'a, 'b> ser::SerializeSeq for SeqSerializer<'a, 'b> {
     type Ok = ();
     type Error = Error;
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         self.serializer.current_type = self.elemtyp;
         value.serialize(&mut *self.serializer)
@@ -443,8 +473,8 @@ impl<'a, 'b> ser::SerializeTuple for &'a mut Serializer<'b> {
     type Error = Error;
 
     fn serialize_element<T>(&mut self, value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         value.serialize(&mut **self)
     }
@@ -459,8 +489,8 @@ impl<'a, 'b> ser::SerializeTupleStruct for &'a mut Serializer<'b> {
     type Error = Error;
 
     fn serialize_field<T>(&mut self, _value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         unimplemented!("Tuple structs not supported")
     }
@@ -475,8 +505,8 @@ impl<'a, 'b> ser::SerializeTupleVariant for &'a mut Serializer<'b> {
     type Error = Error;
 
     fn serialize_field<T>(&mut self, _value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         unimplemented!("enums variants with tuple fields not supported")
     }
@@ -493,8 +523,8 @@ impl<'a, 'b> ser::SerializeStructVariant for &'a mut Serializer<'b> {
     type Error = Error;
 
     fn serialize_field<T>(&mut self, _key: &'static str, _value: &T) -> Result<()>
-        where
-            T: ?Sized + Serialize,
+    where
+        T: ?Sized + Serialize,
     {
         unimplemented!("enums with variant structs not supported")
     }

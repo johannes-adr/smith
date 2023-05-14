@@ -1,30 +1,62 @@
-use std::{fs, time::{Instant, Duration}, ops::Add};
+#![feature(specialization)]
+
+use std::{fs, time::{Instant, Duration}, ops::{Add, Deref, DerefMut}, todo, println};
 
 use Types::Root;
 use byte_unit::Byte;
-use protobuf::Message;
+use minify::json::minify;
+use protobuf::{Message, well_known_types::struct_::value};
 use protos::schema::SomeMessage;
+use serde_json::Value;
 use smith_core::Smith;
 mod protos;
-fn main() {
+mod smith_asyncvec;
+use smith_asyncvec::AsyncVec;
+
+
+
+fn get_json() -> (Value,String,String){
     let json =  fs::read_to_string("./smith-test/example.json").unwrap();
-    let jsonmin =  fs::read_to_string("./smith-test/example.min.json").unwrap();
-    let lenp =test_proto_size() as u128;
-    let lens =test_smith_size() as u128;
+    
+    let mut root: Root = serde_json::from_str(&json).unwrap();
+    for _ in 0..2{
+        let mut cpy = root.person.deref_mut().clone();
+        root.person.append(&mut cpy);
+    }
+
+
+
+    let json = serde_json::to_string_pretty(&root).unwrap();
+    let jsonmin = serde_json::to_string(&root).unwrap();
+    (serde_json::to_value(&jsonmin).unwrap(),json,jsonmin)
+}
+
+
+fn main() {
+    let (jsonval,json,jsonmin) = get_json();
+
+    let runs = 100;
+
+    let smith = Smith::new(&fs::read_to_string("./smith-test/schema.smith").unwrap());
+    let typ = smith.get_type("Root").unwrap();
+    let smith_bytes = Box::leak(smith.json2binary(&json, &typ).unwrap());
+    // fs::write("./smith-test/out.bin", ).unwrap();
+
+    let lenp =test_proto_size(smith_bytes) as u128;
+    let lens =test_smith_size(smith_bytes) as u128;
 
     println!("json: {} (minified: {}) proto: {} smith: {}",
     Byte::from_bytes(json.len() as u128).get_appropriate_unit(false).to_string(),
     Byte::from_bytes(jsonmin.len() as u128).get_appropriate_unit(false).to_string(),
     Byte::from_bytes(lenp).get_appropriate_unit(false).to_string(),
     Byte::from_bytes(lens).get_appropriate_unit(false).to_string());
-    let runs = 100;
 
-    let smith = Smith::new(&fs::read_to_string("./smith-test/schema.smith").unwrap());
-    let typ = smith.get_type("Root").unwrap();
 
-    let smith_bytes = fs::read("./smith-test/out.bin").unwrap();
-    let root: Root = smith.binary2rust(&smith_bytes, &typ).unwrap(); 
-    let jsonval = serde_json::to_value(&json).unwrap();
+
+
+    // let smith_bytes = fs::read("./smith-test/out.bin").unwrap();
+    let mut root: Root = smith.binary2rust(&smith_bytes, &typ).unwrap(); 
+   
     let proto_root = smithroot2proto(root.clone());
     let mut proto_bytes = Vec::new();
     
@@ -74,7 +106,7 @@ fn smithroot2proto(root: Root) -> SomeMessage{
     
     //convert root to some message
     let mut new_root = protos::schema::SomeMessage::new();
-    for person in root.clone().person{
+    for person in root.clone().person.into_inner(){
         let mut new_person = protos::schema::some_message::Person::new();
         new_person.age = person.age as u32;
         new_person.index = person.index as u32;
@@ -95,25 +127,25 @@ fn smithroot2proto(root: Root) -> SomeMessage{
     new_root
 }
 
-fn test_proto_size() -> usize{
-    let (_,root) = read_outbin();
+fn test_proto_size(bytes: &'static [u8]) -> usize{
+    let (_,root) = read_outbin(bytes);
     let mut bytes = Vec::new();
     smithroot2proto(root).write_to_vec(&mut bytes).unwrap();
     return bytes.len();
 }
 
-fn test_smith_size() -> usize{
+fn test_smith_size(bytes: &'static [u8]) -> usize{
     let smith = Smith::new(&fs::read_to_string("./smith-test/schema.smith").unwrap());
     let typ = smith.get_type("Root").unwrap();
-    let (bytes,root) = read_outbin();
+    let (bytes,root) = read_outbin(bytes);
     let new = smith.rust2binary(&root, &typ).unwrap();
     return new.len();
 }
 
-fn read_outbin() -> (&'static [u8],Types::Root<'static>){
+fn read_outbin(bytes: &'static [u8]) -> (&'static [u8],Types::Root<'static>){
     let smith = Box::leak(Box::new(Smith::new(&fs::read_to_string("./smith-test/schema.smith").unwrap())));
     let typ = Box::leak(Box::new(smith.get_type("Root").unwrap()));
-    let bytes = fs::read("./smith-test/out.bin").unwrap().leak();
+    // let bytes = fs::read("./smith-test/out.bin").unwrap().leak();
     let mut back: Types::Root = smith.binary2rust(bytes, typ).unwrap();
     return (bytes, back);
 }
@@ -135,12 +167,8 @@ fn testsmith2(){
         Byte::from_bytes(bytes.len() as u128).get_appropriate_unit(false).to_string(),
         (1.0 - bytes.len() as f32 / json.len() as f32) * 100.0
     );
-     //let bytes = fs::read("./out.bin").unwrap();
     let mut back: Types::Root = smith.binary2rust(&bytes, &typ).unwrap();
-    // for i in 0..1{
-    //     back.person.append(&mut back.person.clone());
-    // }
-    //let bytes = smith.rust2binary(&back, &typ).unwrap();
+
   
     for _ in 0..5{
         let start = Instant::now();
@@ -157,14 +185,14 @@ fn testsmith2(){
     }
 
     
-   // _=fs::write("./out.bin", &bytes);
 }
 
 pub mod Types {
     // smith_rsmacro::generate_bindings!("./schema.smith");
-    #[doc = "this is a comment"]
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+
+use crate::AsyncVec;
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Person<'a> {
     pub index: u64,
@@ -185,7 +213,7 @@ pub struct SimplePerson<'a> {
 #[derive(Serialize, Deserialize, PartialEq, Debug, Clone)]
 pub struct Root<'a> {
     #[serde(borrow)]
-    pub person: Vec<Person<'a>>,
+    pub person: AsyncVec<Person<'a>>,
 }
 
 }
